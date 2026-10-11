@@ -31,7 +31,13 @@ export type ShortlistItem = {
   country?: string | null;      // country/region parsed from location (null = not listed)
   salary?: string | null;       // disclosed salary (or estimate), null = not listed
   salary_kind?: "listed" | "estimate" | null;
+  auto_score?: number | null;     // jobcut's automatic (rule-based) score, always computed
+  auto_reasons?: string | null;
+  claude_score?: number | null;   // Claude's review score, null if Claude hasn't reviewed it
+  claude_reasons?: string | null;
 };
+
+export type ScoreBasis = "claude" | "auto";
 
 export type Shortlist = {
   today: ShortlistItem[];
@@ -42,6 +48,8 @@ export type Shortlist = {
     excluded: number;
     last_pull: string | null;    // when "Find new jobs" last ran
     last_scored: string | null;  // most recent scoring batch
+    claude_count?: number;       // jobs Claude has reviewed (in the funnel)
+    basis?: ScoreBasis;
   };
 };
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShortlistItem } from "@/lib/api";
-import { absoluteDay, offerLink, relativeDay, scorerLabel } from "@/lib/ui";
+import { absoluteDay, ageLabel, offerLink, relativeDay, scorerLabel, shortDate } from "@/lib/ui";
 import ScoreRing from "./ScoreRing";
 import StatusSelect from "./StatusSelect";
 import { Icon } from "./icons";
@@ -24,7 +24,13 @@ export default function JobCard({
   const link = offerLink(item);
   const detail = `/job?id=${item.job_id}`;
   const wp = workplaceLabel(item.workplace_type);
-  const posted = relativeDay(item.posted_date);   // the offer's own publish date
+  const postedDate = shortDate(item.posted_date);  // the offer's own publish date, dd/mm/yy
+  const postedAge = ageLabel(item.posted_date);
+  const posted = postedDate ? `${postedDate}${postedAge ? ` (${postedAge})` : ""}` : null;
+  // The other score, shown small under the ring: Claude view -> auto; auto view -> Claude.
+  const isClaudeView = item.backend === "claude_skills";
+  const otherLabel = isClaudeView ? "Auto" : "Claude";
+  const otherScore = isClaudeView ? item.auto_score : item.claude_score;
   const seen = relativeDay(item.first_seen);       // when we pulled it in
   // Show the posting age when we have it, and always the pull ("seen") date as the
   // reliable signal. Avoid repeating the same day twice.
@@ -56,6 +62,12 @@ export default function JobCard({
               {scorerLabel(item.backend)}
             </span>
           )}
+          <span
+            className="whitespace-nowrap text-[10px] text-on-surface-faint"
+            title={isClaudeView ? "jobcut's automatic score" : "Claude's review score"}
+          >
+            {otherLabel}: {otherScore ?? "–"}
+          </span>
         </div>
       </div>
 

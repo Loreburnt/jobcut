@@ -7,6 +7,7 @@ import {
   getHealth,
   getShortlist,
   setStatus,
+  type ScoreBasis,
   type Shortlist,
   type ShortlistItem,
 } from "@/lib/api";
@@ -41,6 +42,23 @@ export default function HomePage() {
     return saved >= 60 && saved <= 95 ? saved : 70;
   });
   const [q, setQ] = useState("");
+  // Which score drives the list: Claude's review (default) or jobcut's automatic score.
+  const [basis, setBasis] = useState<ScoreBasis>(() => {
+    if (typeof window === "undefined") return "claude";
+    try {
+      return window.localStorage.getItem("jp_basis") === "auto" ? "auto" : "claude";
+    } catch {
+      return "claude";
+    }
+  });
+  function changeBasis(b: ScoreBasis) {
+    setBasis(b);
+    try {
+      window.localStorage.setItem("jp_basis", b);
+    } catch {
+      /* storage unavailable: keep in memory only */
+    }
+  }
   const [toast, setToast] = useState<{ jobId: string; label: string; prev: string | null } | null>(null);
 
   function changeMin(v: number) {
@@ -63,14 +81,14 @@ export default function HomePage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    getShortlist({ min_score: minScore, ...(q ? { q } : {}) })
+    getShortlist({ min_score: minScore, basis, ...(q ? { q } : {}) })
       .then((d) => {
         setData(d);
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"))
       .finally(() => setLoading(false));
-  }, [minScore, q]);
+  }, [minScore, q, basis]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0); // debounce the search box
@@ -152,6 +170,39 @@ export default function HomePage() {
         <RunControls onDone={load} />
       </header>
 
+      {/* score basis tabs: Claude's review vs jobcut's automatic score */}
+      <section aria-label="Score source">
+        <div role="tablist" className="inline-flex gap-1 rounded-lg bg-surface-sunken p-1">
+          {(
+            [
+              { key: "claude", label: "Claude's review", count: data?.meta.claude_count },
+              { key: "auto", label: "Automatic score", count: undefined },
+            ] as { key: ScoreBasis; label: string; count?: number }[]
+          ).map((tab) => {
+            const active = basis === tab.key;
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => changeBasis(tab.key)}
+                className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
+                  active ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                {tab.label}
+                {tab.count != null && <span className="ml-1.5 font-normal text-on-surface-faint">{tab.count}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          {basis === "claude"
+            ? "Jobs Claude has read in full and judged against your profile, remote eligibility and company stability."
+            : "jobcut's instant keyword score for every new job. Fast, but it can't read eligibility or company risk."}
+        </p>
+      </section>
+
       {/* filter row */}
       <section className="flex flex-col items-stretch gap-4 rounded-card border border-border/40 bg-surface p-4 shadow-card lg:flex-row lg:items-center">
         <div className="relative flex-1">
@@ -217,6 +268,11 @@ export default function HomePage() {
             <Section icon="sparkles" title="Latest matches" count={data.today.length}>
               {data.today.length ? (
                 <ProgressiveGrid items={data.today} onApplied={onApplied} />
+              ) : basis === "claude" && !data.meta.claude_count ? (
+                <EmptyState
+                  title="Claude hasn't reviewed these jobs yet"
+                  body="Ask Claude in your chat: “puntúa mis ofertas”. Meanwhile, the Automatic score tab shows every job."
+                />
               ) : (
                 <EmptyState
                   title="No matches at this level"

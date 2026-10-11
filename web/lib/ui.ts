@@ -94,3 +94,28 @@ export function offerLink(item: {
 }): string | null {
   return item.linkedin_url || item.apply_url || item.easy_apply_url || null;
 }
+
+
+// "10/10/26" (dd/mm/yy) for a "YYYY-MM-DD…" value, or null if it isn't a real date.
+export function shortDate(value: string | null | undefined): string | null {
+  const d = dayOnly(value);
+  if (!d) return null;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
+// Always-relative age: "today", "yesterday", "5d ago", "3w ago", "2mo ago".
+export function ageLabel(value: string | null | undefined): string | null {
+  const d = dayOnly(value);
+  if (!d) return null;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((start.getTime() - d.getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 60) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}

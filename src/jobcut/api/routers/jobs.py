@@ -21,11 +21,13 @@ def get_shortlist(
     location: str | None = None,
     recency_days: int | None = None,
     include_applied: bool = False,
+    basis: str = "claude",
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     return surface.shortlist_data(
         conn, min_score=min_score, backlog_min=backlog_min, q=q, location=location,
         recency_days=recency_days, include_applied=include_applied,
+        basis="auto" if basis == "auto" else "claude",
     )
 
 

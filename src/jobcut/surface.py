@@ -19,7 +19,7 @@ import re
 
 import pandas as pd
 
-from . import db, paths, salaryparse
+from . import config, db, paths, salaryparse
 from .route import funnel_series
 
 TOP_N = 10          # CLI markdown digest: a tight "top N" highlight list
@@ -167,7 +167,9 @@ def load_applied():
 # publish date (from Apify) — both drive the freshness line on each card.
 RECORD_FIELDS = ["job_id", "title", "company_name", "location", "score", "match_reasons",
                  "linkedin_url", "apply_url", "easy_apply_url", "scored_date",
-                 "workplace_type", "status", "backend", "first_seen", "posted_date"]
+                 "workplace_type", "status", "backend", "first_seen", "posted_date",
+                 "auto_score", "auto_reasons", "claude_score", "claude_reasons"]
+_INT_FIELDS = {"score", "auto_score", "claude_score"}
 
 # jobs columns the shortlist actually needs (drops `description` + other heavy text);
 # the rest of a shortlist row comes from the scores table. Used by the API path only —
@@ -190,7 +192,12 @@ def _ranked_funnel(conn, applied_ids, applied_ct, today, light=False):
         return m, None, None, 0
 
     df = m.merge(s, on="job_id", how="left")
-    df["funnel"] = funnel_series(df.location, df.workplace_type)   # vectorized (no per-row apply)
+    df["geo_ok"] = funnel_series(df.location, df.workplace_type)   # vectorized (no per-row apply)
+    # A job Claude has reviewed is in the funnel even if its listed location is outside
+    # your geography: Claude read the posting (e.g. "fully remote in Europe" listed under
+    # Estonia) and judged eligibility itself. The auto view still uses the geo gate.
+    _backend = df["backend"] if "backend" in df.columns else pd.Series("", index=df.index)
+    df["funnel"] = df["geo_ok"] | _backend.fillna("").eq("claude_skills")
     f = df[df.funnel].copy()
     f["score"] = pd.to_numeric(f.match_score, errors="coerce")
 
@@ -236,8 +243,9 @@ def _records(frame):
     for _, r in frame[cols].iterrows():
         d = {}
         for c in cols:
-            if c == "score":
-                d[c] = int(r.score) if pd.notna(r.score) else None
+            if c in _INT_FIELDS:
+                v = pd.to_numeric(r[c], errors="coerce")
+                d[c] = int(v) if pd.notna(v) else None
             else:
                 d[c] = None if blank(r[c]) else str(r[c])
         rows.append(d)
@@ -308,9 +316,32 @@ def _card_extras(conn, rows: list[dict]) -> None:
                 d["salary_kind"] = "estimate"
 
 
+def _auto_scores(conn, job_ids) -> dict:
+    """Rule-based ("automatic") score for each job, computed live so it is always
+    available next to Claude's review, even after Claude's scores were ingested."""
+    ids = [str(j) for j in job_ids]
+    if not ids:
+        return {}
+    from .score import _rule_based_kwargs
+    from .scoring import get_scorer
+    scorer = get_scorer("rule_based", **_rule_based_kwargs(config.load()))
+    qs = ",".join("?" * len(ids))
+    cur = conn.execute(f"SELECT * FROM jobs WHERE job_id IN ({qs})", ids)
+    cols = [c[0] for c in cur.description]
+    out = {}
+    for row in cur.fetchall():
+        job = dict(zip(cols, row))
+        try:
+            js = scorer.score(job, "")
+            out[str(job["job_id"])] = (js.match_score, js.match_reasons)
+        except Exception:
+            out[str(job["job_id"])] = (None, None)
+    return out
+
+
 def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
                    recency_days=None, include_applied=False, today=None,
-                   limit=FEED_LIMIT) -> dict:
+                   limit=FEED_LIMIT, basis="claude") -> dict:
     """The ranked shortlist as data (the GET /api/shortlist payload).
 
     Excludes already-applied roles by `applications.job_id` (not the CSV tracker)
@@ -331,6 +362,24 @@ def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
     if f is None or f.empty:
         return {"today": [], "backlog": [], "meta": meta}
     meta["funnel_count"] = int(df.funnel.sum())
+
+    # Two views of the same jobs: Claude's review vs the automatic (rule-based) score.
+    is_claude = f["backend"].fillna("").eq("claude_skills") if "backend" in f.columns else pd.Series(False, index=f.index)
+    auto = _auto_scores(conn, f.job_id)
+    f["auto_score"] = f.job_id.astype(str).map(lambda j: auto.get(j, (None, None))[0])
+    f["auto_reasons"] = f.job_id.astype(str).map(lambda j: auto.get(j, (None, None))[1])
+    f["claude_score"] = f.score.where(is_claude)
+    f["claude_reasons"] = f.match_reasons.where(is_claude)
+    meta["claude_count"] = int(is_claude.sum())
+    meta["basis"] = basis
+    if basis == "auto":
+        f = f[f.geo_ok].copy()
+        f["score"] = pd.to_numeric(f.auto_score, errors="coerce")
+        f["match_reasons"] = f.auto_reasons
+        f["backend"] = "rule_based"
+        f["scored_date"] = f.first_seen        # "latest" = newest pull, not scoring batch
+    else:
+        f = f[is_claude.reindex(f.index, fill_value=False)].copy()
 
     if q:
         ql = q.lower()
