@@ -5,11 +5,19 @@
     "Business Analyst",
     "Product Analyst"
   ],
-  "geoIds": ["REPLACE_ME"],
-  "workplaceType": ["on-site", "hybrid"],
-  "employmentType": ["full-time"],
+  "geoIds": [
+    "REPLACE_ME"
+  ],
+  "workplaceType": [
+    "on-site",
+    "hybrid"
+  ],
+  "employmentType": [
+    "full-time"
+  ],
   "maxItems": 50,
   "postedLimit": "24h",
   "sortBy": "relevance",
-  "_note": "One file per saved search; the filename (without .json) is the search's source label. Input schema = the harvestapi/linkedin-job-search Apify actor. 'geoIds' is a LinkedIn geo id — find yours by opening a LinkedIn jobs search for your city and copying the geoId from the URL, or check the actor's docs. Copy this file to e.g. searches/madrid.json and edit. Your real searches are git-ignored; only searches/example-*.json are tracked."
+  "_note": "One file per saved search; the filename (without .json) is the search's source label. Input schema = the harvestapi/linkedin-job-search Apify actor. 'geoIds' is a LinkedIn geo id \u2014 find yours by opening a LinkedIn jobs search for your city and copying the geoId from the URL, or check the actor's docs. Copy this file to e.g. searches/madrid.json and edit. Your real searches are git-ignored; only searches/example-*.json are tracked.",
+  "_paused": true
 }

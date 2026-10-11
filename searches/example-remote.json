@@ -5,11 +5,18 @@
     "Product Analyst",
     "Analytics Engineer"
   ],
-  "geoIds": ["91000000"],
-  "workplaceType": ["remote"],
-  "employmentType": ["full-time"],
+  "geoIds": [
+    "91000000"
+  ],
+  "workplaceType": [
+    "remote"
+  ],
+  "employmentType": [
+    "full-time"
+  ],
   "maxItems": 65,
   "postedLimit": "24h",
   "sortBy": "relevance",
-  "_note": "Remote search across a wide region. geoId 91000000 = European Economic Area (EEA). Use a country or worldwide geoId to widen/narrow. Whether a remote job counts as hireable for you is decided by route.py (your geography rules), not here."
+  "_note": "Remote search across a wide region. geoId 91000000 = European Economic Area (EEA). Use a country or worldwide geoId to widen/narrow. Whether a remote job counts as hireable for you is decided by route.py (your geography rules), not here.",
+  "_paused": true
 }

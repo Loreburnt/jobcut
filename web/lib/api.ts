@@ -28,6 +28,9 @@ export type ShortlistItem = {
   backend: string | null;
   first_seen: string | null;   // when we first pulled the offer
   posted_date: string | null;  // the offer's own publish date (from Apify)
+  country?: string | null;      // country/region parsed from location (null = not listed)
+  salary?: string | null;       // disclosed salary (or estimate), null = not listed
+  salary_kind?: "listed" | "estimate" | null;
 };
 
 export type Shortlist = {

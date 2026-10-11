@@ -60,20 +60,44 @@ export default function JobCard({
       </div>
 
       {/* chips: workplace + location */}
-      {(wp || item.location) && (
+      {(wp || (item.location && item.location !== item.country)) && (
         <div className="mb-4 flex flex-wrap gap-2">
           {wp && (
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-3 py-1 text-xs font-semibold text-on-surface">
               <Icon name="briefcase" size={14} /> {wp}
             </span>
           )}
-          {item.location && (
+          {item.location && item.location !== item.country && (
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-3 py-1 text-xs font-semibold text-on-surface">
               <Icon name="map-pin" size={14} /> <span className="max-w-[12rem] truncate">{item.location}</span>
             </span>
           )}
         </div>
       )}
+
+      {/* country + salary: always shown, "not listed" when the offer doesn't say */}
+      <dl className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div className="flex min-w-0 items-start gap-1.5">
+          <Icon name="map-pin" size={15} className="mt-0.5 shrink-0 text-on-surface-faint" />
+          <dt className="sr-only">Country</dt>
+          <dd className={`min-w-0 truncate ${item.country ? "text-on-surface" : "text-on-surface-faint"}`}>
+            {item.country ?? "Country not listed"}
+          </dd>
+        </div>
+        <div className="flex min-w-0 items-start gap-1.5">
+          <Icon name="banknote" size={15} className="mt-0.5 shrink-0 text-on-surface-faint" />
+          <dt className="sr-only">Salary</dt>
+          <dd
+            className={`min-w-0 truncate ${item.salary ? "font-medium text-on-surface" : "text-on-surface-faint"}`}
+            title={item.salary ?? undefined}
+          >
+            {item.salary ?? "Salary not listed"}
+            {item.salary && item.salary_kind === "estimate" && (
+              <span className="ml-1 text-xs font-normal text-on-surface-faint">(estimate)</span>
+            )}
+          </dd>
+        </div>
+      </dl>
 
       {/* freshness: posting age (if known) + the pull ("seen") date */}
       {(posted || seen) && (

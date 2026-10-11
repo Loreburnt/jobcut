@@ -19,7 +19,7 @@ import re
 
 import pandas as pd
 
-from . import db, paths
+from . import db, paths, salaryparse
 from .route import funnel_series
 
 TOP_N = 10          # CLI markdown digest: a tight "top N" highlight list
@@ -204,10 +204,10 @@ def _ranked_funnel(conn, applied_ids, applied_ct, today, light=False):
     f = f[~(f.job_id.isin(applied_ids) | f._ct.isin(applied_ct))].copy()
     n_excl = before - len(f)
 
-    f["has_link"] = (~f.linkedin_url.map(blank)) | (~f.apply_url.map(blank)) | (~f.easy_apply_url.map(blank))
+    f["has_link"] = (~f.linkedin_url.map(blank).astype(bool)) | (~f.apply_url.map(blank).astype(bool)) | (~f.easy_apply_url.map(blank).astype(bool))
     f["_exp"] = pd.to_datetime(f.expire_at, errors="coerce")
     f["expired"] = f._exp.notna() & (f._exp.dt.strftime("%Y-%m-%d") < today)
-    f["has_url"] = (~f.linkedin_url.map(blank)).astype(int)
+    f["has_url"] = (~f.linkedin_url.map(blank).astype(bool)).astype(int)
 
     # collapse reposts, keep best score / with link
     f = f.sort_values(["score", "has_url"], ascending=False).drop_duplicates("canonical_id", keep="first").drop_duplicates("_ct", keep="first")
@@ -242,6 +242,70 @@ def _records(frame):
                 d[c] = None if blank(r[c]) else str(r[c])
         rows.append(d)
     return rows
+
+
+# --- Card extras: salary + country on every shortlist card (added for Arantza) ----------
+_REGION_LABELS = {"european union": "European Union", "emea": "EMEA", "europe": "Europe",
+                  "european economic area": "European Economic Area", "worldwide": "Worldwide"}
+
+
+def country_from_location(loc) -> str | None:
+    """Best-effort country (or region) from a LinkedIn location string.
+
+    "Barcelona, Catalonia, Spain" -> "Spain"; "EMEA" -> "EMEA"; "Remote"/blank -> None.
+    """
+    if blank(loc):
+        return None
+    last = str(loc).split(",")[-1].strip()
+    if not last or last.lower() in ("remote", "remoto", "anywhere"):
+        return None
+    if last.lower().startswith("greater "):        # "Greater Dublin" -> keep as given
+        return last
+    return _REGION_LABELS.get(last.lower(), last)
+
+
+def _fmt_money(v) -> str:
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return f"{n/1000:.0f}k" if n >= 1000 else f"{n:.0f}"
+
+
+def _card_extras(conn, rows: list[dict]) -> None:
+    """Add `country`, `salary` and `salary_kind` (listed | estimate | None) to card dicts."""
+    if not rows:
+        return
+    ids = [r["job_id"] for r in rows]
+    qs = ",".join("?" * len(ids))
+    jobs = {str(r[0]): r for r in conn.execute(
+        f"SELECT job_id, salary_text, salary_min, salary_max, description FROM jobs WHERE job_id IN ({qs})", ids)}
+    try:
+        ests = {str(r[0]): r for r in conn.execute(
+            f"SELECT job_id, est_min, est_max, currency FROM salary_estimates WHERE job_id IN ({qs})", ids)}
+    except Exception:
+        ests = {}
+    for d in rows:
+        d["country"] = country_from_location(d.get("location"))
+        d["salary"], d["salary_kind"] = None, None
+        j = jobs.get(str(d["job_id"]))
+        if j is not None:
+            _, st, mn, mx, desc = j
+            if not blank(st):
+                d["salary"], d["salary_kind"] = str(st), "listed"
+            elif not blank(mn) or not blank(mx):
+                d["salary"] = " - ".join(_fmt_money(x) for x in (mn, mx) if not blank(x))
+                d["salary_kind"] = "listed"
+            else:
+                phrase = salaryparse.salary_text_from_description(desc)
+                if phrase:
+                    d["salary"], d["salary_kind"] = phrase, "listed"
+        if d["salary"] is None and str(d["job_id"]) in ests:
+            _, emn, emx, cur = ests[str(d["job_id"])]
+            if not blank(emn) or not blank(emx):
+                band = " - ".join(_fmt_money(x) for x in (emn, emx) if not blank(x))
+                d["salary"] = f"~{band} {cur or ''}".strip()
+                d["salary_kind"] = "estimate"
 
 
 def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
@@ -287,7 +351,10 @@ def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
     meta["last_scored"] = str(latest) if (len(sd) and str(latest)[:4].isdigit()) else None
     today_top = f[(sd == latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
     backlog = f[(sd < latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
-    return {"today": _records(today_top), "backlog": _records(backlog), "meta": meta}
+    today_rows, backlog_rows = _records(today_top), _records(backlog)
+    _card_extras(conn, today_rows)
+    _card_extras(conn, backlog_rows)
+    return {"today": today_rows, "backlog": backlog_rows, "meta": meta}
 
 
 def main(conn=None):
