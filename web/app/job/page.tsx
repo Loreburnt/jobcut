@@ -22,6 +22,7 @@ import {
   type SalaryEstimate,
 } from "@/lib/api";
 import DocumentViewer from "@/components/DocumentViewer";
+import JobDescription from "@/components/JobDescription";
 import ScoreRing from "@/components/ScoreRing";
 import StatusSelect from "@/components/StatusSelect";
 import { Icon } from "@/components/icons";
@@ -630,9 +631,7 @@ function JobDetailView() {
           {description ? (
             <Panel title="Description">
               <div className={`relative ${longDesc && !descOpen ? "max-h-[260px] overflow-hidden" : ""}`}>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
-                  {description}
-                </p>
+                <JobDescription text={description} />
                 {longDesc && !descOpen && (
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface to-transparent" />
                 )}
